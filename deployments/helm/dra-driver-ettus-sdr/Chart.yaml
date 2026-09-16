@@ -1,0 +1,21 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+apiVersion: v2
+name: dra-driver-ettus-sdr
+description: |
+  Helm chart to deploy the Dynamic Resource Allocation (DRA) driver for Ettus SDR.
+  Allows dynamic injection of Software Defined Radios into Kubernetes containers.
+type: application
+version: 0.1.0
+appVersion: "v0.1.0"
+keywords:
+  - dra
+  - sdr
+  - ettus
+  - kubernetes
+  - device-plugin
+maintainers:
+  - name: arodal
+    email: arodal@gradiant.org

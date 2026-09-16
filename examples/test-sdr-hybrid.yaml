@@ -1,0 +1,54 @@
+--- 
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: sdr-ip-claim-template
+spec:
+  spec:
+    devices:
+      requests:
+      - name: req-1
+        exactly:
+          deviceClassName: sdr-ip
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: sdr-usb-claim-template
+spec:
+  spec:
+    devices:
+      requests:
+      - name: req-2
+        exactly:
+          deviceClassName: sdr-usb
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-sdr-hybrid
+spec:
+  restartPolicy: Never
+  containers:
+  - name: sdr-hybrid-container
+    image: debian:12-slim
+    imagePullPolicy: Always
+    command: ["bash", "-c"]
+    args:
+    - |
+      apt-get update > /dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y usbutils uhd-host > /dev/null 2>&1
+      echo "=== Discovering SDR Devices (Hybrid Mode) ==="
+      uhd_find_devices
+      sleep infinity
+    resources:
+      claims:
+      # We reference BOTH claims here
+      - name: my-usb-radio
+      - name: my-ip-radio
+  
+  # We bind the local pod claim names to the templates created above
+  resourceClaims:
+  - name: my-usb-radio
+    resourceClaimTemplateName: sdr-usb-claim-template
+  - name: my-ip-radio
+    resourceClaimTemplateName: sdr-ip-claim-template

@@ -1,0 +1,214 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+#
+# Portions of this file were modified from the kubernetes-network-driver-basic
+# project, which is licensed under the Apache License, Version 2.0.
+
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: sdr-usb
+spec:
+  selectors:
+  - cel:
+      expression: "has(device.attributes['sdr.gradiant.org'].connection_type) && device.attributes['sdr.gradiant.org'].connection_type == 'usb'"
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: sdr-ip
+spec:
+  selectors:
+  - cel:
+      expression: "has(device.attributes['sdr.gradiant.org'].connection_type) && device.attributes['sdr.gradiant.org'].connection_type == 'ip'"
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dra-driver-ettus-sdr
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceslices
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims
+      - deviceclasses
+    verbs:
+      - get
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims/status
+    verbs:
+      - patch
+      - update
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims/driver
+    verbs:
+      - associated-node:update
+      - associated-node:patch
+    resourceNames:
+      - dra-driver-ettus-sdr
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dra-driver-ettus-sdr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dra-driver-ettus-sdr
+subjects:
+- kind: ServiceAccount
+  name: dra-driver-ettus-sdr
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dra-driver-ettus-sdr
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dra-driver-ettus-sdr
+  namespace: kube-system
+  labels:
+    tier: node
+    app: dra-driver-ettus-sdr
+    k8s-app: dra-driver-ettus-sdr
+spec:
+  selector:
+    matchLabels:
+      app: dra-driver-ettus-sdr
+  template:
+    metadata:
+      labels:
+        tier: node
+        app: dra-driver-ettus-sdr
+        k8s-app: dra-driver-ettus-sdr
+    spec:
+      hostNetwork: true
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      imagePullSecrets:
+      - name: harbor-credenciales
+      serviceAccountName: dra-driver-ettus-sdr
+      hostPID: true
+      initContainers:
+      - name: enable-nri
+        image: busybox:stable
+        volumeMounts:
+        - mountPath: /etc
+          name: etc
+        securityContext:
+          privileged: true
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -o errexit
+          set -o pipefail
+          set -o nounset
+          if [ ! -f "/etc/containerd/config.toml" ]; then
+            echo "containerd config not found. Assuming non-containerd runtime. Please enable NRI manually for your runtime."
+            exit 0
+          fi
+          if grep -q "io.containerd.nri.v1.nri" /etc/containerd/config.toml; then
+            if grep -A 5 "io.containerd.nri.v1.nri" /etc/containerd/config.toml | grep -q "disable = true"; then
+                echo "NRI is present but disabled. Enabling it..."
+                sed -i '/\[plugins."io.containerd.nri.v1.nri"\]/,/\[plugins/ s/disable = true/disable = false/' /etc/containerd/config.toml
+                echo "restarting containerd"
+                nsenter -t 1 -m -u -i -n -p -- systemctl restart containerd
+            else
+                echo "containerd config contains NRI reference and is enabled; taking no action"
+            fi
+          else
+            echo "containerd config does not mention NRI, thus enabling it";
+            printf '%s\\n' "[plugins.\"io.containerd.nri.v1.nri\"]" "  disable = false" "  disable_connections = false" "  plugin_config_path = \"/etc/nri/conf.d\"" "  plugin_path = \"/opt/nri/plugins\"" "  plugin_registration_timeout = \"5s\"" "  plugin_request_timeout = \"5s\"" "  socket_path = \"/var/run/nri/nri.sock\"" >> /etc/containerd/config.toml
+            echo "restarting containerd"
+            nsenter -t 1 -m -u -i -n -p -- systemctl restart containerd
+          fi
+      imagePullSecrets:
+      - name: harbor-credenciales
+      containers:
+      - name: driver
+        args:
+        - /driver
+        - --v=4
+        image: harbor.gradiant.org/lab5g/dra-driver-ettus-sdr:v0.1.0
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+        securityContext:
+          privileged: true
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9177
+        volumeMounts:
+        - name: device-plugin
+          mountPath: /var/lib/kubelet/plugins
+        - name: plugin-registry
+          mountPath: /var/lib/kubelet/plugins_registry
+        - name: nri-plugin
+          mountPath: /var/run/nri
+        - name: netns
+          mountPath: /var/run/netns
+          mountPropagation: HostToContainer
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: dev
+          mountPath: /dev
+        - name: cdi
+          mountPath: /var/run/cdi
+      volumes:
+      - name: device-plugin
+        hostPath:
+          path: /var/lib/kubelet/plugins
+      - name: plugin-registry
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry
+      - name: nri-plugin
+        hostPath:
+          path: /var/run/nri
+      - name: netns
+        hostPath:
+          path: /var/run/netns
+      - name: etc
+        hostPath:
+          path: /etc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: cdi
+        hostPath:
+          path: /var/run/cdi
+---

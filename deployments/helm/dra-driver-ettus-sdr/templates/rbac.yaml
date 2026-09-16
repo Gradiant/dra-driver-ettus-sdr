@@ -1,0 +1,70 @@
+{{- /*
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+*/ -}}
+{{- if .Values.rbac.create -}}
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "dra-driver-ettus-sdr.fullname" . }}
+  labels:
+    {{- include "dra-driver-ettus-sdr.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceslices
+    verbs:
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims
+      - deviceclasses
+    verbs:
+      - get
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims/status
+    verbs:
+      - patch
+      - update
+  - apiGroups:
+      - "resource.k8s.io"
+    resources:
+      - resourceclaims/driver
+    verbs:
+      - associated-node:update
+    resourceNames:
+      - dra-driver-ettus-sdr
+  {{- if .Values.rbac.rules }}
+  {{- toYaml .Values.rbac.rules | nindent 2 }}
+  {{- end }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "dra-driver-ettus-sdr.fullname" . }}
+  labels:
+    {{- include "dra-driver-ettus-sdr.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "dra-driver-ettus-sdr.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "dra-driver-ettus-sdr.serviceAccountName" . }}
+  namespace: {{ include "dra-driver-ettus-sdr.namespace" . }}
+{{- end }}

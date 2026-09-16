@@ -1,0 +1,191 @@
+{{- /*
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+*/ -}}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "dra-driver-ettus-sdr.fullname" . }}
+  namespace: {{ include "dra-driver-ettus-sdr.namespace" . }}
+  labels:
+    {{- include "dra-driver-ettus-sdr.labels" . | nindent 4 }}
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.commonAnnotations .Values.config.daemonsetAnnotations }}
+  annotations:
+    {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.config.daemonsetAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "dra-driver-ettus-sdr.selectorLabels" . | nindent 6 }}
+  {{- with .Values.config.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "dra-driver-ettus-sdr.selectorLabels" . | nindent 8 }}
+        {{- with .Values.config.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if or .Values.config.podAnnotations .Values.commonAnnotations }}
+      annotations:
+        {{- with .Values.commonAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.config.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      hostNetwork: true
+      hostPID: true
+      {{- with .Values.config.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      serviceAccountName: {{ include "dra-driver-ettus-sdr.serviceAccountName" . }}
+      {{- if .Values.config.automountServiceAccountToken }}
+      automountServiceAccountToken: {{ .Values.config.automountServiceAccountToken }}
+      {{- end }}
+      {{- if or .Values.global.imagePullSecrets .Values.config.image.pullSecrets }}
+      imagePullSecrets:
+        {{- with .Values.global.imagePullSecrets }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.config.image.pullSecrets }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.config.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.config.affinity }}
+      affinity:
+        {{- toYaml .Values.config.affinity | nindent 8 }}
+      {{- end }}
+      {{- with .Values.config.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.config.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.config.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.config.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      {{- if .Values.config.initContainers }}
+      initContainers:
+        {{- toYaml .Values.config.initContainers | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: driver
+        {{- if .Values.config.command }}
+        command:
+          {{- toYaml .Values.config.command | nindent 10 }}
+        {{- end }}
+        args:
+          {{- if .Values.config.args }}
+          {{- toYaml .Values.config.args | nindent 10 }}
+          {{- else }}
+          - /driver
+          - --v=4
+          {{- end }}
+        image: "{{ default .Values.config.image.registry .Values.global.imageRegistry }}/{{ .Values.config.image.repository }}:{{ .Values.config.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.config.image.pullPolicy }}
+        {{- if .Values.config.resources }}
+        resources:
+          {{- toYaml .Values.config.resources | nindent 10 }}
+        {{- end }}
+        {{- if .Values.config.containerSecurityContext.enabled }}
+        securityContext:
+          {{- omit .Values.config.containerSecurityContext "enabled" | toYaml | nindent 10 }}
+        {{- end }}
+        {{- if .Values.config.livenessProbe.enabled }}
+        livenessProbe:
+          {{- omit .Values.config.livenessProbe "enabled" | toYaml | nindent 10 }}
+        {{- else if .Values.config.customLivenessProbe }}
+        livenessProbe:
+          {{- toYaml .Values.config.customLivenessProbe | nindent 10 }}
+        {{- end }}
+        {{- if .Values.config.readinessProbe.enabled }}
+        readinessProbe:
+          {{- omit .Values.config.readinessProbe "enabled" | toYaml | nindent 10 }}
+        {{- else if .Values.config.customReadinessProbe }}
+        readinessProbe:
+          {{- toYaml .Values.config.customReadinessProbe | nindent 10 }}
+        {{- else }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9177
+        {{- end }}
+        {{- if .Values.config.startupProbe.enabled }}
+        startupProbe:
+          {{- omit .Values.config.startupProbe "enabled" | toYaml | nindent 10 }}
+        {{- else if .Values.config.customStartupProbe }}
+        startupProbe:
+          {{- toYaml .Values.config.customStartupProbe | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: device-plugin
+          mountPath: /var/lib/kubelet/plugins
+        - name: plugin-registry
+          mountPath: /var/lib/kubelet/plugins_registry
+        - name: nri-plugin
+          mountPath: /var/run/nri
+        - name: netns
+          mountPath: /var/run/netns
+          mountPropagation: HostToContainer
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: dev
+          mountPath: /dev
+        - name: cdi
+          mountPath: /var/run/cdi
+        {{- if .Values.config.extraVolumeMounts }}
+        {{- toYaml .Values.config.extraVolumeMounts | nindent 8 }}
+        {{- end }}
+      {{- if .Values.config.sidecars }}
+      {{- toYaml .Values.config.sidecars | nindent 6 }}
+      {{- end }}
+      volumes:
+      - name: device-plugin
+        hostPath:
+          path: /var/lib/kubelet/plugins
+      - name: plugin-registry
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry
+      - name: nri-plugin
+        hostPath:
+          path: /var/run/nri
+      - name: netns
+        hostPath:
+          path: /var/run/netns
+      - name: etc
+        hostPath:
+          path: /etc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: cdi
+        hostPath:
+          path: /var/run/cdi
+      {{- if .Values.config.extraVolumes }}
+      {{- toYaml .Values.config.extraVolumes | nindent 6 }}
+      {{- end }}

@@ -1,0 +1,33 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: sdr-usb-claim
+spec:
+  spec:
+    devices:
+      requests:
+      - name: req-1
+        exactly:
+          deviceClassName: sdr-usb
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-sdr-usb
+spec:
+  containers:
+  - name: debian
+    image: debian:12-slim
+    command: ["bash", "-c"]
+    args:
+    - |
+      apt-get update > /dev/null 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get install -y usbutils uhd-host > /dev/null 2>&1
+      echo "=== FIND DEVICES ==="
+      uhd_find_devices
+      sleep infinity
+    resources:
+      claims:
+      - name: sdr
+  resourceClaims:
+  - name: sdr
+    resourceClaimTemplateName: sdr-usb-claim

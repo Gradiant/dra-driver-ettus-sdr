@@ -1,0 +1,18 @@
+dra-driver-ettus-sdr
+
+This project is distributed under the terms of the Mozilla Public License, v. 2.0 (MPL-2.0). 
+However, portions of the code in this repository are derived from other projects licensed under the Apache License, Version 2.0.
+
+1. kubernetes-network-driver-basic (Apache License 2.0)
+Original repository: https://github.com/aojea/kubernetes-network-driver-basic
+The following files were originally copied from this project and subsequently modified to adapt them for SDR devices:
+- pkg/driver/driver.go: Modified to implement SDR-specific logic (IP and USB handling) instead of basic networking.
+- cmd/dra-driver-ettus-sdr/main.go: Modified to include SDR-specific initialization and firmware copying.
+- deployments/manifests/install.yaml: Modified to define SDR DeviceClasses and Roles.
+- deployments/container/Dockerfile: Modified from the original multi-stage build to include UHD drivers and tools.
+- Makefile: Modified build targets and tag generation logic.
+
+2. dra-example-driver (Apache License 2.0)
+Original repository: https://github.com/kubernetes-sigs/dra-example-driver
+The following file was originally copied from this project and modified to adapt for SDR devices:
+- pkg/cdi/cdi.go: Modified to generate CDI specifications tailored for SDR USB devices.

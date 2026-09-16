@@ -1,0 +1,22 @@
+{{- /*
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+*/ -}}
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: sdr-usb
+spec:
+  selectors:
+  - cel:
+      expression: "has(device.attributes['sdr.gradiant.org'].connection_type) && device.attributes['sdr.gradiant.org'].connection_type == 'usb'"
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: sdr-ip
+spec:
+  selectors:
+  - cel:
+      expression: "has(device.attributes['sdr.gradiant.org'].connection_type) && device.attributes['sdr.gradiant.org'].connection_type == 'ip'"

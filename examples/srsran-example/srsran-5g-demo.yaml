@@ -1,0 +1,78 @@
+---
+# 1. ResourceClaimTemplate (MANDATORY for exclusivity)
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: sdr-template
+spec:
+  spec:
+    devices:
+      requests:
+      - name: sdr-device
+        exactly:
+          deviceClassName: sdr-usb
+
+---
+# 2. Minimum configuration for srsRAN 5G (gNB)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsran-gnb-config
+data:
+  gnb.yml: |
+    cu_cp:
+      amf:
+        addr: "open5gs-sample-amf-ngap"    # DNS interno generado por el Operador
+        bind_addr: "0.0.0.0"               # Escuchar en todas las interfaces locales
+        supported_tracking_areas:
+          - tac: 1
+            plmn_list:
+              - plmn: "99970"
+                tai_slice_support_list:
+                  - sst: 1
+                    sd: 0x111111
+    ru_sdr:
+      device_driver: uhd
+      device_args: type=b200,num_recv_frames=64,num_send_frames=64
+      srate: 23.04
+      tx_gain: 45
+      rx_gain: 45
+      otw_format: sc12
+    cell_cfg:
+      dl_arfcn: 632628
+      band: 78
+      channel_bandwidth_MHz: 20
+      common_scs: 30
+      plmn: "99970"
+      tac: 1
+      pci: 1
+    log:
+      filename: /tmp/gnb.log
+      all_level: info
+
+---
+# 3. 5G Base Station Pod
+apiVersion: v1
+kind: Pod
+metadata:
+  name: srsran-5g-demo
+spec:
+  containers:
+  - name: gnb
+    image: gradiant/srsran-5g:25_10
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+    - name: config-volume
+      mountPath: /etc/srsran/
+    command: ["/opt/srsRAN_Project/target/bin/gnb"]
+    args: ["-c", "/etc/srsran/gnb.yml"]
+    resources:
+      claims:
+      - name: radio
+  resourceClaims:
+  - name: radio
+    resourceClaimTemplateName: sdr-template
+  volumes:
+  - name: config-volume
+    configMap:
+      name: srsran-gnb-config
